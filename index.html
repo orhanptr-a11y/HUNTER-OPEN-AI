@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>2030 HUNTER — One Click</title>
+<style>
+body{margin:0;background:#07111f;color:#edf4ff;font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif}
+.wrap{max-width:1000px;margin:auto;padding:24px}.card{background:#0e1b2e;border:1px solid #263c58;border-radius:18px;padding:20px;margin:14px 0}
+h1{margin:0;font-size:32px}.sub,.muted{color:#8fa5bf}.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+button{border:0;border-radius:12px;padding:16px 22px;background:#2f75b5;color:#fff;font-weight:900;font-size:18px;cursor:pointer}
+button:disabled{opacity:.55;cursor:wait}.pill{padding:5px 9px;border-radius:99px;background:#17324f;color:#a9d5ff;font-size:12px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.stat{background:#13243b;border-radius:12px;padding:13px}.num{font-size:25px;font-weight:900}
+table{width:100%;border-collapse:collapse}th,td{padding:11px;border-bottom:1px solid #263b55;text-align:left;font-size:13px}th{color:#9dc8ff}
+.score{font-weight:900;font-size:17px}.empty{padding:30px;text-align:center;color:#8fa5bf}
+@media(max-width:650px){.stats{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body><div class="wrap">
+<div class="card">
+<h1>🔎 2030 HUNTER</h1>
+<div class="sub">One-click autonomous company discovery</div>
+<div style="height:16px"></div>
+<div class="bar"><button id="scan">SCAN NOW</button><span class="pill">26 TEMALAR</span><span class="pill">80+ RADAR</span><span class="pill">VOYG'Yİ GEÇMEK ŞART DEĞİL</span></div>
+<div id="status" class="muted" style="margin-top:13px">Hazır.</div>
+</div>
+<div class="stats">
+<div class="stat"><div class="muted">NEW</div><div class="num" id="new">—</div></div>
+<div class="stat"><div class="muted">RADAR 80+</div><div class="num" id="radar">—</div></div>
+<div class="stat"><div class="muted">TOP TIER 90+</div><div class="num" id="top">—</div></div>
+<div class="stat"><div class="muted">LAST SCAN</div><div class="num" id="time" style="font-size:15px">—</div></div>
+</div>
+<div class="card"><h2>Yeni şirketler</h2>
+<table><thead><tr><th>Score</th><th>Ticker</th><th>Şirket</th><th>Tema</th><th>Durum</th><th>Gerekçe</th></tr></thead>
+<tbody id="rows"><tr><td colspan="6" class="empty">SCAN NOW'a bas.</td></tr></tbody></table></div>
+<div class="card"><div class="muted">OpenAI Deep Research arka planda çalışır. Araştırma uzun sürebilir. API anahtarı tarayıcıya gönderilmez; backend tarafında tutulur.</div></div>
+</div>
+<script>
+let currentId=null;
+const $=id=>document.getElementById(id);
+function parseReport(text){
+ const lines=text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+ const out=[];
+ for(const line of lines){
+   if(line.startsWith("SCAN COMPLETE")) continue;
+   const parts=line.split("|").map(x=>x.trim());
+   if(parts.length>=6 && /^\d+$/.test(parts[3])){
+     out.push({ticker:parts[0],company:parts[1],theme:parts[2],score:Number(parts[3]),status:parts[4],reason:parts.slice(5).join(" | ")});
+   }
+ }
+ return out.filter(x=>x.score>=80);
+}
+function render(items){
+ $("new").textContent=items.length;$("radar").textContent=items.filter(x=>x.score>=80).length;
+ $("top").textContent=items.filter(x=>x.score>=90).length;
+ $("rows").innerHTML=items.length?items.sort((a,b)=>b.score-a.score).map(x=>`<tr>
+ <td class="score">${x.score}</td><td><b>${x.ticker}</b></td><td>${x.company}</td><td>${x.theme}</td>
+ <td><span class="pill">${x.status}</span></td><td>${x.reason}</td></tr>`).join(""):'<tr><td colspan="6" class="empty">Bu taramada 80+ yeni şirket bulunmadı.</td></tr>';
+}
+async function poll(id){
+ for(let i=0;i<90;i++){
+   const r=await fetch("/api/scan?action=status&id="+encodeURIComponent(id));
+   const d=await r.json();
+   if(d.status==="completed"){
+     const items=parseReport(d.text||""); render(items);
+     $("status").textContent="SCAN COMPLETE • "+items.length+" yeni radar adayı.";
+     $("time").textContent=new Date().toLocaleTimeString();
+     $("scan").disabled=false; return;
+   }
+   if(d.status==="failed"){throw new Error(d.error||"Deep Research failed");}
+   $("status").textContent="Araştırılıyor… "+(d.status||"in_progress")+" • "+Math.round((i+1)/90*100)+"%";
+   await new Promise(r=>setTimeout(r,10000));
+ }
+ throw new Error("Araştırma beklenen sürede tamamlanmadı.");
+}
+$("scan").onclick=async()=>{
+ $("scan").disabled=true;$("status").textContent="Deep Research başlatılıyor…";
+ try{
+   const r=await fetch("/api/scan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"start"})});
+   if(!r.ok) throw new Error("START HTTP "+r.status);
+   const d=await r.json(); currentId=d.id; await poll(currentId);
+ }catch(e){$("status").textContent="Tarama hatası: "+e.message;$("scan").disabled=false;}
+};
+</script>
+</body></html>
